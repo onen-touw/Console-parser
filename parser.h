@@ -6,7 +6,38 @@
 #include <type_traits>
 #include <ostream>
 
-/// @brief 
+/// @brief Class for simple access to console line variables like --a=123
+///
+/// Support program name (first word in line). For enable see Construcors and parse definition 
+///
+/// Support two modes: strict and no-strict. If strict mode enabled any error stop parser. 
+/// Otherwise, if no-strict mode, it is possible bind wrong variable. You can check state by call good() function.
+///
+/// For set your variables see bind() function definition.  
+/// 
+///
+/// Rules:
+///
+/// 1) Program name (if expected and flag enabled) shoud starts from alphabet symbol otherwise it set bad flag.
+///
+/// 2) Every options must be used in special format: --key=value or -key=value. No any spaces from first dash 
+/// to last symbol except large string(see 4) otherwise it set bad flag.
+///
+/// 3) Arrays must be used in format -key or --key=10,23,42,2. No any spaces...
+///
+/// 4) Large strings should be double quoted by symbol ".
+///
+/// Example of bad options:
+///
+///     ---v=1
+///
+///     - 
+///
+///     =2 
+///
+///     --gp=12.2.5 
+///
+///     --str=\"no end --vc=10,,20 -- -key=val"
 class parser
 {
 private:
@@ -45,20 +76,24 @@ public:
 
     parser() {}
     
-    /// @brief constructor if has args do parse console line automticaly
-    /// @param s console line in std::string format
-    /// @param parse_prog_name set if expect that fisrt word if program name  
-    /// @param separators array of separators by defult: 'space', '\\n', '\t'
+    /// @brief constructor if has args do parse console line automticaly.
+    /// @param s console line in std::string format.
+    /// @param parse_prog_name set if expect that fisrt word if program name.
+    /// @param strict flag for enable/disable strict mode. 
+    /// If enabled when first error will met than stop parser algorithm and clear all data.
+    /// @param separators array of separators by defult: 'space', '\\n', '\t'.
     parser(const std::string& s, bool parse_prog_name = false, bool strict = false, const char* separators = default_line_separators) 
         : _line(s), _strict(strict)
     {
         do_parse(separators, parse_prog_name);
     }
 
-    /// @brief constructor if has args do parse console line automticaly
-    /// @param s&& console line in std::string format
-    /// @param parse_prog_name set if expect that fisrt word if program name  
-    /// @param separators array of separators by defult: 'space', '\\n', '\t'
+    /// @brief constructor if has args do parse console line automticaly.
+    /// @param s&& console line in std::string format.
+    /// @param parse_prog_name set if expect that fisrt word if program name.
+    /// @param strict flag for enable/disable strict mode. 
+    /// If enabled when first error will met than stop parser algorithm and clear all data.
+    /// @param separators array of separators by defult: 'space', '\\n', '\t'.
     parser(std::string&& s,  bool parse_prog_name = false, bool strict = false, const char* separators = default_line_separators) 
         : _line(std::move(s)), _strict(strict)
     {
@@ -67,10 +102,10 @@ public:
 
     ~parser() {}
 
-    /// @brief parse console line
-    /// @param s console line in std::string format
-    /// @param parse_prog_name set if expect that fisrt word if program name
-    /// @param separators - array of separators by defult: 'space', '\\n', '\t'
+    /// @brief parse console line. If called more than once reset all data before run parser algorithm.
+    /// @param s console line in std::string format.
+    /// @param parse_prog_name set if expect that fisrt word if program name.
+    /// @param separators - array of separators by defult: 'space', '\\n', '\t'.
     void parse(const std::string& s, bool parse_prog_name = false, const char* separators = default_line_separators)
     {
         _is_good = true;
@@ -79,10 +114,10 @@ public:
         do_parse(separators, parse_prog_name);
     }
 
-    /// @brief parse console line
-    /// @param s&& console line in std::string format
-    /// @param parse_prog_name set if expect that fisrt word if program name  
-    /// @param separators array of separators by defult: 'space', '\\n', '\t'
+    /// @brief parse console line. If called more than once reset all data before run parser algorithm.
+    /// @param s&& console line in std::string format.
+    /// @param parse_prog_name set if expect that fisrt word if program name.
+    /// @param separators array of separators by defult: 'space', '\\n', '\t'.
     void parse(std::string &&s, bool parse_prog_name = false, const char *separators = default_line_separators)
     {
         _is_good = true;
@@ -91,16 +126,18 @@ public:
         do_parse(separators, parse_prog_name);
     }
 
-    /// @brief reset all parser data. After call this function any bind return false
+    /// @brief reset all parser data and error flags. After call this function any bind() return false and good() return true.
     void reset()
     {
         _options.clear();
         _line.clear();
+        _is_good = true;
     }
 
+    /// @brief return error indicator.
     bool good() const { return _is_good; }
 
-    /// @brief log function
+    /// @brief log function.
     /// @param os targer stream e.g. std::cout, std::ofstream ...
     void log(std::ostream& os) const 
     {
@@ -137,15 +174,15 @@ public:
         os << '\n';
     }
 
-    /// @brief Bind your variable <var> that shoud be found by token <token> 
-    /// @tparam Ty type of variable <var> that you want to bind. Support any floating and integral type and std::string
-    /// @param var pointer to variable that you want to bind. If (var == nullptr) skip binding 
-    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose"
-    /// @return true if found option in console line and false otherwise
+    /// @brief Bind your variable <var> that shoud be found by token <token>. 
+    /// @tparam Ty type of variable <var> that you want to bind. Support any floating and integral type and std::string.
+    /// @param var pointer to variable that you want to bind. If (var == nullptr) skip binding.
+    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose".
+    /// @return true if found option in console line and false otherwise. If strict mode enabled and error catched return false.
     template <typename Ty>
     bool bind(Ty* var, const std::string& token) const
     {
-        if (!_is_good)
+        if (!_is_good && _strict || _options.empty())
         {
             return false;
         }
@@ -168,12 +205,12 @@ public:
         return false;
     }
 
-    /// @brief find token in console line 
-    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose"
-    /// @return true if found option in console line and false otherwise
+    /// @brief find token in console line.
+    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose".
+    /// @return true if found option in console line and false otherwise. If strict mode enabled and error catched return false.
     bool find(const std::string& token) const 
     {
-        if (!_is_good)
+        if (!_is_good && _strict || _options.empty())
         {
             return false;
         }
@@ -190,15 +227,15 @@ public:
         return false;
     }
 
-    /// @brief Bind your std::vector that shoud be found by token <token> 
-    /// @tparam Ty type of vector's item Support any floating and integral type and std::string
-    /// @param arr pointer to vector that you want to bind. If (arr == nullptr) skip binding 
-    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose"
-    /// @return true if found option in console line and false otherwise
+    /// @brief Bind your std::vector that shoud be found by token <token>.
+    /// @tparam Ty type of vector's item Support any floating and integral type and std::string.
+    /// @param arr pointer to vector that you want to bind. If (arr == nullptr) skip binding.
+    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose".
+    /// @return true if found option in console line and false otherwise. If strict mode enabled and error catched return false.
     template <typename Ty>
     bool bind(std::vector<Ty>* arr, const std::string& token) const
     {
-        if (!_is_good)
+        if (!_is_good && _strict || _options.empty())
         {
             return false;
         }
@@ -247,9 +284,13 @@ public:
         return false;
     }
 
+
+    /// @brief get program name. 
+    /// @return return empty string if error was met in strict mode or flag parse_prog_name was setted false
     std::string get_prog_name() const 
     {
-        if (!_is_good)
+        
+        if (!_is_good && _strict)
         {
             return std::string();
         }
@@ -283,7 +324,7 @@ private:
 
     void parsing(const char *separators, size_t offset = 0)
     {
-        if (_line.empty())
+        if (_line.empty() || !_is_good && _strict)
         {
             return;
         }
