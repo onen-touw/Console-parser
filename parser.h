@@ -4,8 +4,9 @@
 #include <vector>
 #include <map>
 #include <type_traits>
-#include <iostream>
+#include <ostream>
 
+/// @brief 
 class parser
 {
 private:
@@ -36,38 +37,83 @@ public:
 private:
     container_t _options;
     std::string _line;
+    ind_t _pname = {};
     bool _is_good = true;
+
 public:
 
     parser() {}
     
-    parser(const std::string& s, const char* separators = default_line_separators) 
+    /// @brief constructor if has args do parse console line automticaly
+    /// @param s console line in std::string format
+    /// @param parse_prog_name set if expect that fisrt word if program name  
+    /// @param separators array of separators by defult: 'space', '\\n', '\t'
+    parser(const std::string& s, bool parse_prog_name = false, const char* separators = default_line_separators) 
         : _line(s) 
     {
-        parsing(separators);
+        do_parse(separators, parse_prog_name);
     }
 
-    parser(std::string&& s, const char* separators) 
+    /// @brief constructor if has args do parse console line automticaly
+    /// @param s&& console line in std::string format
+    /// @param parse_prog_name set if expect that fisrt word if program name  
+    /// @param separators array of separators by defult: 'space', '\\n', '\t'
+    parser(std::string&& s,  bool parse_prog_name = false, const char* separators = default_line_separators) 
         : _line(std::move(s)) 
     {
-        parsing(separators);
+        do_parse(separators, parse_prog_name);
     }
 
     ~parser() {}
 
-
-    void log() const 
+    /// @brief parse console line
+    /// @param s console line in std::string format
+    /// @param parse_prog_name set if expect that fisrt word if program name
+    /// @param separators - array of separators by defult: 'space', '\\n', '\t'
+    void parse(const std::string& s, bool parse_prog_name = false, const char* separators = default_line_separators)
     {
-        std::cout << "log:\n";
-        for (const auto &i : _options)
-        {
-            std::cout << "\t" 
-            << i.first << " {" << i.second.start - _line.begin() << "; " << i.second.end - _line.begin() << "} (" << i.second.get_dist() << ")\n";
-            std::cout << "\t\targs: " << _line.substr(i.second.start - _line.begin(), i.second.get_dist()) << '\n';
-        }
-        std::cout << '\n';
+        _options.clear();
+        _line = s;
+        do_parse(separators, parse_prog_name);
     }
 
+    /// @brief parse console line
+    /// @param s&& console line in std::string format
+    /// @param parse_prog_name set if expect that fisrt word if program name  
+    /// @param separators array of separators by defult: 'space', '\\n', '\t'
+    void parse(std::string &&s, bool parse_prog_name = false, const char *separators = default_line_separators)
+    {
+        _options.clear();
+        _line = std::move(s);
+        do_parse(separators, parse_prog_name);
+    }
+
+    /// @brief reset all parser data. After call this function any bind return false
+    void reset()
+    {
+        _options.clear();
+        _line.clear();
+    }
+
+    /// @brief log function
+    /// @param os targer stream e.g. std::cout, std::ofstream ...
+    void log(std::ostream& os) const 
+    {
+        os << "log:\n";
+        for (const auto &i : _options)
+        {
+            os << "\t" 
+            << i.first << " {" << i.second.start - _line.begin() << "; " << i.second.end - _line.begin() << "} (" << i.second.get_dist() << ")\n";
+            os << "\t\targs: " << _line.substr(i.second.start - _line.begin(), i.second.get_dist()) << '\n';
+        }
+        os << '\n';
+    }
+
+    /// @brief Bind your variable <var> that shoud be found by token <token> 
+    /// @tparam Ty type of variable <var> that you want to bind. Support any floating and integral type and std::string
+    /// @param var pointer to variable that you want to bind. If (var == nullptr) skip binding 
+    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose"
+    /// @return true if found option in console line and false otherwise
     template <typename Ty>
     bool bind(Ty* var, const std::string& token) const
     {
@@ -81,10 +127,7 @@ public:
                 if (var)
                 {
                     auto st = _line.substr(it->second.start - _line.begin(), it->second.get_dist());
-                    std::cout << "bind arg: "<< st << '\n';
                     *var = get_arg<Ty>(_line, it->second);
-
-                    std::cout << "\tval: " << *var << '\n';
                 }
                 return true;
             }
@@ -92,9 +135,30 @@ public:
         return false;
     }
 
+    /// @brief find token in console line 
+    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose"
+    /// @return true if found option in console line and false otherwise
+    bool find(const std::string& token) const 
+    {
+        std::vector<std::string> tks = token_split(token, ',');
+        for (auto& t : tks)
+        {
+            auto it = _options.find(t);
+            if (it != _options.end())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    // template <typename Ty>
-    bool bind_array(std::vector<double>* arr, const std::string& token) const
+    /// @brief Bind your std::vector that shoud be found by token <token> 
+    /// @tparam Ty type of vector's item Support any floating and integral type and std::string
+    /// @param arr pointer to vector that you want to bind. If (arr == nullptr) skip binding 
+    /// @param token string of tokens. You can write multyple words separated by ',' (comma). Example: "-v,--v,--verbose"
+    /// @return true if found option in console line and false otherwise
+    template <typename Ty>
+    bool bind(std::vector<Ty>* arr, const std::string& token) const
     {
         std::vector<std::string> tks = token_split(token, ',');
 
@@ -111,13 +175,14 @@ public:
                     auto start = ind.start;
                     size_t dq = 0;
 
+                    arr->clear();
+
                     while (iter!= ind.end)
                     {
                         if (*iter == ',' && dq % 2 == 0)
                         {
-                            auto st = _line.substr(start - _line.begin(), iter - start);
-                            std::cout << "array item: "<< st << '\n';
-
+                            ind_t it_ind = {start, iter};
+                            arr->push_back(get_arg<Ty>(_line, it_ind));
                             ++iter;
                             start = iter;
                             continue;
@@ -129,14 +194,9 @@ public:
                         ++iter;
                     }
 
-                    auto st = _line.substr(start - _line.begin(), iter - start);
-                    std::cout << "array item: "<< st << '\n';
-
-                    // arr->reserve(sz);
-                    // for (size_t i = 0; i < sz; i++)
-                    // {
-                    //     arr->push_back(it->second.get_arg<Ty>(i));
-                    // }
+                    ind_t it_ind = {start, iter};
+                    arr->push_back(get_arg<double>(_line, it_ind));
+                    arr->shrink_to_fit();
                 }
                 return true;
             }
@@ -144,13 +204,36 @@ public:
         return false;
     }
 
-
+    std::string get_prog_name() const 
+    {
+        return _line.substr(_pname.start - _line.begin(), _pname.get_dist());
+    }
 
 private:
-    void parsing(const char *separators)
-    {
 
-        auto start = _line.begin();
+    void do_parse(const char* separators, bool parse_prog_name) {
+        if (parse_prog_name)
+        {
+            auto it = _line.find(' ');
+            _pname = {_line.begin(), _line.begin() + it};
+            size_t off = it + 1;
+            if (_line.begin() + off != _line.end())
+            {
+                parsing(separators, off);
+            }
+            return;
+        }
+        parsing(separators);
+    } 
+
+    void parsing(const char *separators, size_t offset = 0)
+    {
+        if (_line.empty())
+        {
+            return;
+        }
+        
+        auto start = _line.begin() + offset;
         auto iter = start;
 
         ind_t ind = {start, start};
@@ -166,31 +249,11 @@ private:
                 // avoid array of separators
                 if (start != iter)
                 {
-                    auto st = _line.substr(start - _line.begin(), iter - start);
-                    std::cout << "split_opts: "<< st << '\n';
-
                     auto isres = is_class(start, iter);
-                    std::cout << "\tis_class: " << std::boolalpha << isres << '\n';
-
                     if (isres)
                     {
                         auto idxs = opt_split(_line, default_arg_separator, start, iter);
-
-
-                        auto cl = _line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist());
-                        std::cout << "\tclass: " << cl << '\n';
-
-                        _options.emplace(cl, idxs.args);
-
-                        auto sz = idxs.args.get_dist();
-                        std::cout << "\targs-sz: " << sz << '\n';
-                        if (sz)
-                        {
-                            auto args = _line.substr(idxs.args.start - _line.begin(), sz);
-                            std::cout << "\targs: " << args << '\n';
-                        }
-
-                        std::cout << "\n";
+                        _options.emplace(_line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist()), idxs.args);
                     }
                     else
                     {
@@ -213,27 +276,12 @@ private:
         if (start != iter)
         {
             auto st = _line.substr(start - _line.begin(), iter - start);
-            std::cout << "split_opts: "<< st << '\n';
             
             auto isres = is_class(start, iter);
-            std::cout << "\tis_class: " << std::boolalpha << isres << '\n';
             if (isres)
             {
                 auto idxs = opt_split(_line, default_arg_separator, start, iter);
-
-                auto cl = _line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist());
-                std::cout << "\tclass: " << cl << '\n';
-                _options.emplace(cl, idxs.args);
-
-                auto sz = idxs.args.get_dist();
-                std::cout << "\targs-sz: " << sz << '\n';
-                if (sz)
-                {
-                    auto args = _line.substr(idxs.args.start - _line.begin(), sz);
-                    std::cout << "\targs: " << args << '\n';
-                }
-
-                std::cout << "\n";
+                _options.emplace(_line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist()), idxs.args);
             }
             else {_is_good = false;}
         }
@@ -245,14 +293,12 @@ private:
 
         auto iter = begin;
         
+        // class
         while (iter != end)
         {
             if (*iter == separator)
             {
                 sind.cls = {begin, iter};
-                // class
-                auto st = s.substr(begin - s.begin(), iter - begin);
-                std::cout << "opt_split: class: " << st << '\n';
                 break;
             }
             ++iter;
@@ -262,8 +308,6 @@ private:
         if (iter == end)
         {
             sind.cls = {begin, iter};
-            auto st = s.substr(begin - s.begin(), iter - begin);
-            std::cout << "opt_split: class: " << st << '\n';
             return sind;
         }
 
@@ -271,8 +315,6 @@ private:
         if (++iter != end)
         {
             sind.args = {iter, end};
-            auto st = s.substr(iter - s.begin(), end - iter);
-            std::cout << "opt_split: args: " << st << '\n';
         }
         
         return sind;

@@ -5,14 +5,18 @@
 
 #include "parser.h"
 
+#define NTOS(s) #s
 
 int main()
 {
     std::cout << "normal line\n";
     {
-        std::string s = "-v=1 -a --g=12 --gp=12.2\n -e=-34.08  \n\t --vc=10.0,-23,22,10 --str=stringg\n--string-large=\"large string\"";
-        parser prs(s);
-        prs.log();
+        std::string s = "blank -v=1 -a --g=12 --gp=12.2\n -e=-34.08  \n\t --vc=10.25,-23,22,10 --str=stringg\n--string-large=\"large string\"";
+        parser prs(s, true);
+        prs.log(std::cout);
+
+        auto pname = prs.get_prog_name();
+        std::cout << "prog name: '" << pname << "'\n";
 
         std::vector<double> v;
         double dv = 0;
@@ -21,13 +25,24 @@ int main()
         std::string str;
         std::string str_large;
 
-        prs.bind_array(&v, "vc");
+        prs.bind(&v, "vc");
         prs.bind(&dv, "gp");
         prs.bind(&ndv, "e");
         prs.bind(&iv, "g");
         prs.bind(&str, "str");
         prs.bind(&str_large, "string-large");
 
+        std::cout << "var value: " << NTOS(dv) " = " << dv << '\n';
+        std::cout << "var value: " << NTOS(ndv) " = " << ndv << '\n';
+        std::cout << "var value: " << NTOS(iv) " = " << iv << '\n';
+        std::cout << "var value: " << NTOS(str) " = " << str << '\n';
+        std::cout << "var value: " << NTOS(str_large) " = " << str_large << '\n';
+        
+        std::cout << "var value: " << NTOS(v) ":\n";
+        for (const auto &i : v)
+        {
+            std::cout << "\titem value: " << i << '\n';
+        }
     }
 
 
@@ -38,7 +53,7 @@ int main()
         parser prs(s);
 
         // parser::parsing(s, " \t\n");
-        prs.log();
+        prs.log(std::cout);
     }
     
     std::cout << '\n';
@@ -48,7 +63,7 @@ int main()
         parser prs(bad_s);
 
         // parser::parsing(s, " \t\n");
-        prs.log();
+        prs.log(std::cout);
     }
 
 
