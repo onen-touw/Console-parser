@@ -12,7 +12,7 @@ int main()
     std::cout << "normal line\n";
     {
         std::string s = "blank -v=1 -a --g=12 --gp=12.2\n -e=-34.08  \n\t --vc=10.25,-23,22,10 --str=stringg\n--string-large=\"large string\"";
-        parser prs(s, true);
+        parser prs(s, true, true);
         prs.log(std::cout);
 
         auto pname = prs.get_prog_name();
@@ -50,9 +50,7 @@ int main()
     std::cout << "broken line\n";
     {
         std::string s = "-v=1 -g= -- - g";
-        parser prs(s);
-
-        // parser::parsing(s, " \t\n");
+        parser prs(s, false, true);
         prs.log(std::cout);
     }
     
@@ -60,12 +58,8 @@ int main()
     std::cout << "broken line2\n";
     {
         std::string bad_s = "---v=1 - =2 --gp=12.2.5 --str=\"no end --vc=10,,20 -- -key=val";
-        parser prs(bad_s);
-
-        // parser::parsing(s, " \t\n");
+        parser prs(bad_s, false, true);
         prs.log(std::cout);
     }
-
-
     return 0;
 }

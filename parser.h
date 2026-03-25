@@ -37,8 +37,9 @@ public:
 private:
     container_t _options;
     std::string _line;
-    ind_t _pname = {};
+    bool _strict = false;
     bool _is_good = true;
+    ind_t _pname = {};
 
 public:
 
@@ -48,8 +49,8 @@ public:
     /// @param s console line in std::string format
     /// @param parse_prog_name set if expect that fisrt word if program name  
     /// @param separators array of separators by defult: 'space', '\\n', '\t'
-    parser(const std::string& s, bool parse_prog_name = false, const char* separators = default_line_separators) 
-        : _line(s) 
+    parser(const std::string& s, bool parse_prog_name = false, bool strict = false, const char* separators = default_line_separators) 
+        : _line(s), _strict(strict)
     {
         do_parse(separators, parse_prog_name);
     }
@@ -58,8 +59,8 @@ public:
     /// @param s&& console line in std::string format
     /// @param parse_prog_name set if expect that fisrt word if program name  
     /// @param separators array of separators by defult: 'space', '\\n', '\t'
-    parser(std::string&& s,  bool parse_prog_name = false, const char* separators = default_line_separators) 
-        : _line(std::move(s)) 
+    parser(std::string&& s,  bool parse_prog_name = false, bool strict = false, const char* separators = default_line_separators) 
+        : _line(std::move(s)), _strict(strict)
     {
         do_parse(separators, parse_prog_name);
     }
@@ -72,6 +73,7 @@ public:
     /// @param separators - array of separators by defult: 'space', '\\n', '\t'
     void parse(const std::string& s, bool parse_prog_name = false, const char* separators = default_line_separators)
     {
+        _is_good = true;
         _options.clear();
         _line = s;
         do_parse(separators, parse_prog_name);
@@ -83,6 +85,7 @@ public:
     /// @param separators array of separators by defult: 'space', '\\n', '\t'
     void parse(std::string &&s, bool parse_prog_name = false, const char *separators = default_line_separators)
     {
+        _is_good = true;
         _options.clear();
         _line = std::move(s);
         do_parse(separators, parse_prog_name);
@@ -95,11 +98,36 @@ public:
         _line.clear();
     }
 
+    bool good() const { return _is_good; }
+
     /// @brief log function
     /// @param os targer stream e.g. std::cout, std::ofstream ...
     void log(std::ostream& os) const 
     {
-        os << "log:\n";
+        os << "log:\n  status: ";
+        
+        if (!_is_good)
+            os << "error\n";
+        else 
+            os << "good\n";
+
+        os << "  mode: ";
+        if (_strict)
+            os << "strict\n";
+        else        
+            os << "no strict\n";
+
+        if (_options.empty())
+        {
+            os << "empty\n";
+            if (_strict && !_is_good)
+            {
+                os << "  because strict mode catch error in line\n";
+            }
+            return;
+        }
+        
+        os << "parser:\n";
         for (const auto &i : _options)
         {
             os << "\t" 
@@ -117,6 +145,11 @@ public:
     template <typename Ty>
     bool bind(Ty* var, const std::string& token) const
     {
+        if (!_is_good)
+        {
+            return false;
+        }
+        
         std::vector<std::string> tks = token_split(token, ',');
 
         for (auto& t : tks)
@@ -140,6 +173,11 @@ public:
     /// @return true if found option in console line and false otherwise
     bool find(const std::string& token) const 
     {
+        if (!_is_good)
+        {
+            return false;
+        }
+        
         std::vector<std::string> tks = token_split(token, ',');
         for (auto& t : tks)
         {
@@ -160,6 +198,11 @@ public:
     template <typename Ty>
     bool bind(std::vector<Ty>* arr, const std::string& token) const
     {
+        if (!_is_good)
+        {
+            return false;
+        }
+
         std::vector<std::string> tks = token_split(token, ',');
 
         for (auto& t : tks)
@@ -206,6 +249,11 @@ public:
 
     std::string get_prog_name() const 
     {
+        if (!_is_good)
+        {
+            return std::string();
+        }
+        
         return _line.substr(_pname.start - _line.begin(), _pname.get_dist());
     }
 
@@ -214,6 +262,13 @@ private:
     void do_parse(const char* separators, bool parse_prog_name) {
         if (parse_prog_name)
         {
+            auto beg = _line.begin();
+            if (!isalpha(*beg))
+            {
+                _is_good = false;
+                return;
+            }
+            
             auto it = _line.find(' ');
             _pname = {_line.begin(), _line.begin() + it};
             size_t off = it + 1;
@@ -246,18 +301,31 @@ private:
             {
                 ind = {start, iter};
 
-                // avoid array of separators
+                // avoid train of separators
                 if (start != iter)
                 {
-                    auto isres = is_class(start, iter);
-                    if (isres)
+                    auto sep_cnt = is_class(start, iter);
+                    if (sep_cnt)
                     {
-                        auto idxs = opt_split(_line, default_arg_separator, start, iter);
+                        auto idxs = opt_split(_line, _is_good, default_arg_separator, start + sep_cnt, iter);
+                        if (!_is_good)
+                        {
+                            if (_strict)
+                            {
+                                reset();
+                                return;
+                            }
+                        }
                         _options.emplace(_line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist()), idxs.args);
                     }
                     else
                     {
                         _is_good = false;
+                        if (_strict)
+                        {
+                            reset();
+                            return;
+                        }
                     }
                 }
 
@@ -275,19 +343,41 @@ private:
         // avoid train of separators
         if (start != iter)
         {
-            auto st = _line.substr(start - _line.begin(), iter - start);
-            
-            auto isres = is_class(start, iter);
-            if (isres)
+            auto sep_cnt = is_class(start, iter);
+            if (sep_cnt)
             {
-                auto idxs = opt_split(_line, default_arg_separator, start, iter);
+                auto idxs = opt_split(_line, _is_good, default_arg_separator, start + sep_cnt, iter);
+                if (!_is_good)
+                {
+                    if (_strict)
+                    {
+                        reset();
+                        return;
+                    }
+                }
                 _options.emplace(_line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist()), idxs.args);
             }
-            else {_is_good = false;}
+            else {
+                _is_good = false;
+                if (_strict)
+                {
+                    reset();
+                    return;
+                }
+            }
+        }
+        if (dq % 2 != 0)
+        {
+            _is_good = false;
+            if (_strict)
+            {
+                reset();
+                return;
+            }
         }
     }
 
-    static opt_ind_t opt_split(const std::string& s, char separator, const std::string::const_iterator begin, const std::string::const_iterator end)
+    static opt_ind_t opt_split(const std::string& s, bool& goodflg, char separator, const std::string::const_iterator begin, const std::string::const_iterator end)
     {
         opt_ind_t sind = {};
 
@@ -305,6 +395,7 @@ private:
         }
         sind.args = {s.begin(), s.begin()}; // for avoid UB
         
+        // no error just oprion without arg
         if (iter == end)
         {
             sind.cls = {begin, iter};
@@ -314,15 +405,20 @@ private:
         // args
         if (++iter != end)
         {
+            // for avoid --a= and --a== 
+            if (is_separator(*iter, default_line_separators) && *iter != '=')
+            {
+                goodflg = false;
+                return sind;
+            }
             sind.args = {iter, end};
         }
         
         return sind;
     }
 
-    static bool is_class(std::string::iterator &begin, const std::string::const_iterator end)
+    static size_t is_class(std::string::iterator begin, const std::string::const_iterator end)
     {
-
         if (*begin == '-')
         {
             if (++begin != end)
@@ -331,14 +427,18 @@ private:
                 {
                     if (++begin != end)
                     {
-                        return true;
+                        if (!std::isalpha(*begin))
+                        {
+                            return 0;
+                        }
+                        return 2;
                     }
-                    return false;
+                    return 0;
                 }
-                return true;
+                return 1;
             }
         }
-        return false;
+        return 0;
     }
 
     static bool is_separator(char c, const char* seps)
@@ -350,12 +450,9 @@ private:
             {
                 return true;
             }
-            
             s = *(++seps);
         }
-
         return false;
-        
     }
     
 	static std::vector<std::string> token_split(const std::string& s, char separator)
