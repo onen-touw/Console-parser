@@ -9,6 +9,8 @@
 
 int main()
 {
+    using namespace Console_parser;
+
     std::cout << "normal line\n";
     {
         std::string s = "blank -v=1 -a --g=12 --gp=12.2\n -e=-34.08  \n\t --vc=10.25,-23,22,10 --str=stringg\n--string-large=\"large string\"";
@@ -61,5 +63,14 @@ int main()
         parser prs(bad_s, false, true);
         prs.log(std::cout);
     }
+
+    std::cout << '\n';
+    std::cout << "only blank\n";
+    {
+        std::string s = "blank";
+        parser prs(s, true, true);
+        prs.log(std::cout);
+    }
+
     return 0;
 }
