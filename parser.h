@@ -212,7 +212,6 @@ namespace Console_parser
                 {
                     if (var)
                     {
-                        auto st = _line.substr(it->second.start - _line.begin(), it->second.get_dist());
                         *var = get_arg<Ty>(_line, it->second);
                     }
                     return true;
