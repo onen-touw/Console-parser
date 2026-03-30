@@ -204,7 +204,7 @@ namespace Console_parser
             }
             
             std::vector<std::string> tks = token_split(token, ',');
-
+            
             for (auto& t : tks)
             {
                 auto it = _options.find(t);
