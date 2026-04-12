@@ -49,8 +49,8 @@ namespace Console_parser
 
         struct ind_t
         {
-            iterator_t start;
-            iterator_t end;
+            long start;
+            long end;
 
             size_t get_dist() const {return end - start;}
         };
@@ -152,10 +152,10 @@ namespace Console_parser
         {
             os << "log:\n  status: ";
             
-            if (!_is_good)
-                os << "error\n";
-            else 
+            if (_is_good)
                 os << "good\n";
+            else 
+                os << "error\n";
 
             os << "  mode: ";
             if (_strict)
@@ -183,9 +183,9 @@ namespace Console_parser
             os << "parser:\n";
             for (const auto &i : _options)
             {
-                os << "\t" 
-                << i.first << " {" << i.second.start - _line.begin() << "; " << i.second.end - _line.begin() << "} (" << i.second.get_dist() << ")\n";
-                os << "\t\targs: " << _line.substr(i.second.start - _line.begin(), i.second.get_dist()) << '\n';
+                // os << "\t" 
+                // << i.first << " {" << i.second.start  << "; " << i.second.end << "} (" << i.second.get_dist() << ")\n";
+                os << "\t\targs: " << _line.substr(i.second.start, i.second.get_dist()) << '\n';
             }
             os << '\n';
         }
@@ -198,7 +198,7 @@ namespace Console_parser
         template <typename Ty>
         bool bind(Ty* var, const std::string& token) const
         {
-            if ((!_is_good && _strict )|| _options.empty())
+            if ((!_is_good && _strict ) || _options.empty())
             {
                 return false;
             }
@@ -212,7 +212,7 @@ namespace Console_parser
                 {
                     if (var)
                     {
-                        auto st = _line.substr(it->second.start - _line.begin(), it->second.get_dist());
+                        auto st = _line.substr(it->second.start, it->second.get_dist());
                         *var = get_arg<Ty>(_line, it->second);
                     }
                     return true;
@@ -226,7 +226,7 @@ namespace Console_parser
         /// @return true if found option in console line and false otherwise. If strict mode enabled and error catched return false.
         bool find(const std::string& token) const 
         {
-            if (!_is_good && (_strict || _options.empty()))
+            if ((!_is_good && _strict) || _options.empty())
             {
                 return false;
             }
@@ -267,17 +267,17 @@ namespace Console_parser
                     {
                         auto ind = it->second;      // indeces of start and end of array
                         
-                        auto iter = ind.start;
-                        auto start = ind.start;
+                        auto iter = ind.start + _line.begin();
+                        auto start = ind.start + _line.begin();
                         size_t dq = 0;
 
                         arr->clear();
 
-                        while (iter!= ind.end)
+                        while (iter!= ind.end + _line.begin())
                         {
                             if (*iter == ',' && dq % 2 == 0)
                             {
-                                ind_t it_ind = {start, iter};
+                                ind_t it_ind = {start - _line.begin(), iter - _line.begin()};
                                 arr->push_back(get_arg<Ty>(_line, it_ind));
                                 ++iter;
                                 start = iter;
@@ -290,7 +290,7 @@ namespace Console_parser
                             ++iter;
                         }
 
-                        ind_t it_ind = {start, iter};
+                        ind_t it_ind = {start - _line.begin(), iter - _line.begin()};
                         arr->push_back(get_arg<double>(_line, it_ind));
                         arr->shrink_to_fit();
                     }
@@ -314,10 +314,16 @@ namespace Console_parser
                 return std::string();
             }
             
-            return _line.substr(_pname.start - _line.begin(), sz);
+            return _line.substr(_pname.start, sz);
         }
 
     private:
+
+        void strict_reset()
+        {
+            _options.clear();
+            _line.clear();
+        }
 
         void do_parse(const char* separators, bool parse_prog_name) {
             if (_line.empty())
@@ -344,7 +350,7 @@ namespace Console_parser
                     }
                     ++iter;
                 }
-                _pname = {_line.begin(), iter};
+                _pname = {0, iter - _line.begin()};
 
                 // for only blank in line
                 if (iter == _line.end())
@@ -368,7 +374,7 @@ namespace Console_parser
             auto start = beg;
             auto iter = start;
 
-            ind_t ind = {start, start};
+            ind_t ind = {start - _line.begin(), start - _line.begin()};
 
             size_t dq = 0;
 
@@ -376,7 +382,7 @@ namespace Console_parser
             {
                 if (is_separator(*iter, separators) && dq % 2 == 0)
                 {
-                    ind = {start, iter};
+                    ind = {start - _line.begin(), iter - _line.begin()};
 
                     // avoid train of separators
                     if (start != iter)
@@ -389,18 +395,18 @@ namespace Console_parser
                             {
                                 if (_strict)
                                 {
-                                    reset();
+                                    strict_reset();
                                     return;
                                 }
                             }
-                            _options.emplace(_line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist()), idxs.args);
+                            _options.emplace(_line.substr(idxs.cls.start, idxs.cls.get_dist()), idxs.args);
                         }
                         else
                         {
                             _is_good = false;
                             if (_strict)
                             {
-                                reset();
+                                strict_reset();
                                 return;
                             }
                         }
@@ -424,21 +430,18 @@ namespace Console_parser
                 if (sep_cnt)
                 {
                     auto idxs = opt_split(_line, _is_good, default_arg_separator, start + sep_cnt, iter);
-                    if (!_is_good)
+                    if (!_is_good && _strict)
                     {
-                        if (_strict)
-                        {
-                            reset();
+                            strict_reset();
                             return;
-                        }
                     }
-                    _options.emplace(_line.substr(idxs.cls.start - _line.begin(), idxs.cls.get_dist()), idxs.args);
+                    _options.emplace(_line.substr(idxs.cls.start, idxs.cls.get_dist()), idxs.args);
                 }
                 else {
                     _is_good = false;
                     if (_strict)
                     {
-                        reset();
+                        strict_reset();
                         return;
                     }
                 }
@@ -448,7 +451,7 @@ namespace Console_parser
                 _is_good = false;
                 if (_strict)
                 {
-                    reset();
+                    strict_reset();
                     return;
                 }
             }
@@ -465,17 +468,17 @@ namespace Console_parser
             {
                 if (*iter == separator)
                 {
-                    sind.cls = {begin, iter};
+                    sind.cls = {begin - s.begin(), iter - s.begin()};
                     break;
                 }
                 ++iter;
             }
-            sind.args = {s.begin(), s.begin()}; // for avoid UB
-            
+            sind.args = {0, 0}; // for avoid UB
+
             // no error just oprion without arg
             if (iter == end)
             {
-                sind.cls = {begin, iter};
+                sind.cls = {begin - s.begin(), iter - s.begin()};
                 return sind;
             }
 
@@ -488,7 +491,7 @@ namespace Console_parser
                     goodflg = false;
                     return sind;
                 }
-                sind.args = {iter, end};
+                sind.args = {iter - s.begin(), end - s.begin()};
             }
             
             return sind;
@@ -563,7 +566,7 @@ namespace Console_parser
                     return Ty{};
                 }
 
-                auto s = ln.substr(ind.start - ln.begin(), sz);
+                auto s = ln.substr(ind.start, sz);
                 Ty f = static_cast<Ty>(std::atof(s.c_str()));
                 return f;
             }
@@ -579,7 +582,7 @@ namespace Console_parser
                     return Ty{};
                 }
 
-                auto s = ln.substr(ind.start - ln.begin(), sz);
+                auto s = ln.substr(ind.start, sz);
                 Ty i = static_cast<Ty>(std::atoi(s.c_str()));
                 return i;
             }
@@ -594,20 +597,20 @@ namespace Console_parser
                 {
                     return Ty();
                 }
-                if (*ind.start == '"')
+                if (ln[ind.start] == '"')
                 {
                     auto its = ind.start + 1;
                     auto ins = ind.end - 1;
 
                     if (its != ins) // avoid empty large srtings like: ""
                     {
-                        auto s = ln.substr(its - ln.begin(), ins - its);
+                        auto s = ln.substr(its, ins - its);
                         return s;                    
                     }
                     return std::string();
                 }
                 
-                auto s = ln.substr(ind.start - ln.begin(), sz);
+                auto s = ln.substr(ind.start, sz);
                 return s;
             }
     };
