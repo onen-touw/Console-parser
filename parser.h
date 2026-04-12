@@ -204,7 +204,7 @@ namespace Console_parser
             }
             
             std::vector<std::string> tks = token_split(token, ',');
-
+            
             for (auto& t : tks)
             {
                 auto it = _options.find(t);
@@ -212,7 +212,6 @@ namespace Console_parser
                 {
                     if (var)
                     {
-                        auto st = _line.substr(it->second.start, it->second.get_dist());
                         *var = get_arg<Ty>(_line, it->second);
                     }
                     return true;
