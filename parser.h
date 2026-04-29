@@ -183,9 +183,7 @@ namespace Console_parser
             os << "parser:\n";
             for (const auto &i : _options)
             {
-                // os << "\t" 
-                // << i.first << " {" << i.second.start  << "; " << i.second.end << "} (" << i.second.get_dist() << ")\n";
-                os << "\t\targs: " << _line.substr(i.second.start, i.second.get_dist()) << '\n';
+                os << "\t" << i.first << ": " << _line.substr(i.second.start, i.second.get_dist()) << '\n';
             }
             os << '\n';
         }
