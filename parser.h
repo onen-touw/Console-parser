@@ -140,6 +140,11 @@ namespace Console_parser
             do_parse(s, separators, parse_prog_name);
         }
 
+        const container_t& get_native_options() const 
+        {
+            return _options;
+        }
+
         /// @brief add 
         /// @param s 
         /// @param separators 
